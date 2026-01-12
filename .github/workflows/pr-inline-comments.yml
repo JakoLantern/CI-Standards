@@ -50,11 +50,9 @@ jobs:
           script: |
             const fs = require('fs');
 
-            // Load violations from current repo root
-            let rawData = fs.readFileSync('violations.json', 'utf8');
-            const jsonStart = rawData.indexOf('[');
-            const jsonEnd = rawData.lastIndexOf(']') + 1;
-            const comments = JSON.parse(rawData.substring(jsonStart, jsonEnd));
+            // Load violations - now only contains JSON array
+            const rawData = fs.readFileSync('violations.json', 'utf8');
+            const comments = JSON.parse(rawData.trim());
 
             console.log(`Found ${comments.length} violations`);
 

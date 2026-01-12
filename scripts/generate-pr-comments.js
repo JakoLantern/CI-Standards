@@ -210,7 +210,7 @@ const changedFilesOutput = execSync(`git diff --name-only --diff-filter=ACMTU ${
   .split('\n')
   .filter(f => f.length > 0);
 
-console.log('📄 Changed files:', changedFilesOutput);
+console.error('📄 Changed files:', changedFilesOutput);
 
 let allComments = [];
 
@@ -230,8 +230,8 @@ for (const file of changedFilesOutput) {
   allComments = allComments.concat(checkCSSFile(file, ranges));
 }
 
-// Output results
-console.log(`\n✓ Found ${allComments.length} violations`);
+// Output results - logs to stderr, JSON to stdout
+console.error(`\n✓ Found ${allComments.length} violations`);
 console.log(JSON.stringify(allComments, null, 2));
 
 process.exit(allComments.length > 0 ? 1 : 0);
