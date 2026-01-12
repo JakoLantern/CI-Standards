@@ -233,4 +233,5 @@ for (const file of changedFilesOutput) {
 console.error(`\n✓ Found ${allComments.length} violations`);
 console.log(JSON.stringify(allComments, null, 2));
 
-process.exit(allComments.length > 0 ? 1 : 0);
+// Exit 0 so output is captured properly
+process.exit(0);

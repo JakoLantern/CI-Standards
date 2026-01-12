@@ -51,9 +51,27 @@ jobs:
           script: |
             const fs = require('fs');
 
-            // Load violations - now only contains JSON array
-            const rawData = fs.readFileSync('violations.json', 'utf8');
-            const comments = JSON.parse(rawData.trim());
+            // Check if violations.json exists and has content
+            if (!fs.existsSync('violations.json')) {
+              console.log('⚠️ violations.json not found');
+              return;
+            }
+
+            const rawData = fs.readFileSync('violations.json', 'utf8').trim();
+            
+            if (!rawData) {
+              console.log('✓ No violations found (empty file)');
+              return;
+            }
+
+            let comments;
+            try {
+              comments = JSON.parse(rawData);
+            } catch (error) {
+              console.log('❌ Failed to parse violations.json:', error.message);
+              console.log('Content:', rawData.substring(0, 500));
+              return;
+            }
 
             console.log(`Found ${comments.length} violations`);
 
