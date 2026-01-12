@@ -2,6 +2,11 @@ name: PR Inline Code Comments
 
 on:
   workflow_call:
+    inputs:
+      pr_number:
+        required: true
+        type: number
+        description: 'Pull Request number to post comments on'
 
 permissions:
   pull-requests: write
@@ -81,14 +86,14 @@ jobs:
               }));
               
               console.log(`Attempting to post ${reviewComments.length} comments...`);
-              console.log('PR Number:', context.payload.pull_request.number);
+              console.log('PR Number:', ${{ inputs.pr_number }});
               console.log('Repo:', context.repo.owner + '/' + context.repo.repo);
               
               try {
                 const review = await github.rest.pulls.createReview({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  pull_number: context.payload.pull_request.number,
+                  pull_number: ${{ inputs.pr_number }},
                   body: `##  Code Standards Review\n\nFound ${reviewComments.length} violation(s) that need to be resolved. See inline comments below.`,
                   event: 'REQUEST_CHANGES',
                   comments: reviewComments.slice(0, 30)
@@ -104,7 +109,7 @@ jobs:
                   await github.rest.issues.createComment({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    issue_number: context.payload.pull_request.number,
+                    issue_number: ${{ inputs.pr_number }},
                     body: `##  Code Standards Violations\n\nFound ${reviewComments.length} violations. Check the Actions logs for full details.`
                   });
                   console.log('✓ Posted as issue comment instead');
