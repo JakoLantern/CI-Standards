@@ -74,7 +74,7 @@ jobs:
                 await github.rest.pulls.createReview({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  pull_number: context.issue.number,
+                  pull_number: context.payload.pull_request.number,
                   body: `##  Code Standards Review\n\nFound ${comments.length} violation(s) that need to be resolved. See inline comments below.`,
                   event: 'REQUEST_CHANGES',
                   comments: reviewComments.slice(0, 30)
@@ -85,7 +85,7 @@ jobs:
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  issue_number: context.issue.number,
+                  issue_number: context.payload.pull_request.number,
                   body: `##  Code Standards Violations\n\nFound ${comments.length} violations. Check logs for details.`
                 });
               }
