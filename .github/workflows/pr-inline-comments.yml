@@ -79,9 +79,9 @@ jobs:
             const repoOwner = process.env.REPO_OWNER;
             const repoName = process.env.REPO_NAME;
             const prNumber = parseInt(process.env.PR_NUMBER);
-            
+
             let comments = [];
-            
+
             try {
               const output = fs.readFileSync('caller-repo/violations.json', 'utf8');
               const jsonMatch = output.match(/\[[\s\S]*\]/);
@@ -91,41 +91,29 @@ jobs:
             } catch (error) {
               console.log('Could not parse violations:', error.message);
             }
-            
-            console.log(`Found ${comments.length} violations to post`);
-            console.log('Posting to:', repoOwner + '/' + repoName + ' PR #' + prNumber);
-            
+
             if (comments.length > 0) {
+              // Format the comments for the Pull Request Review API
               const reviewComments = comments.map(c => ({
                 path: c.path,
-                line: c.line,
+                line: parseInt(c.line), // Ensure this is a number
                 side: 'RIGHT',
                 body: c.body
               }));
-              
-              console.log(`Attempting to post ${reviewComments.length} comments...`);
-              
-              // GitHub API has a limit of 30 comments per review, so batch them
-              const batchSize = 30;
-              for (let i = 0; i < reviewComments.length; i += batchSize) {
-                const batch = reviewComments.slice(i, i + batchSize);
-                try {
-                  const review = await github.rest.pulls.createReview({
-                    owner: repoOwner,
-                    repo: repoName,
-                    pull_number: prNumber,
-                    body: `Code Standards Review - Batch ${Math.floor(i / batchSize) + 1}`,
-                    event: 'REQUEST_CHANGES',
-                    comments: batch
-                  });
-                  console.log(`✓ Posted review with ${batch.length} comments`);
-                  console.log('Review ID:', review.data.id);
-                } catch (error) {
-                  console.log(`❌ Failed to post review: ${error.message}`);
-                }
-              }
-              
-              console.log(`✓ Posted all ${reviewComments.length} violation comments!`);
+
+              console.log(`Attempting to post a review with ${reviewComments.length} comments...`);
+
+              // We post ONE review containing MANY comments. 
+              // This is better than a loop because it doesn't hit rate limits.
+              await github.rest.pulls.createReview({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                event: 'REQUEST_CHANGES',
+                comments: reviewComments
+              });
+
+              console.log(`✓ Posted review with ${reviewComments.length} inline comments!`);
             } else {
               console.log('✓ No violations found!');
             }
