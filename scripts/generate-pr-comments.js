@@ -43,9 +43,17 @@ function getChangedLineRanges(file) {
 }
 
 function isLineChanged(lineNum, changedRanges) {
-  // Only return true if line is within the actual diff hunks
+  // Check if line is within the actual diff hunks
   return changedRanges.some(
     range => lineNum >= range.start && lineNum <= range.end
+  );
+}
+
+function isNearChangedLine(lineNum, changedRanges) {
+  // Check if line is within diff OR within 5 lines after a change
+  // This catches function declarations after modified JSDoc comments
+  return changedRanges.some(
+    range => lineNum >= range.start && lineNum <= range.end + 5
   );
 }
 
@@ -88,17 +96,9 @@ function checkTypeScriptFile(file, changedRanges) {
       }
 
       // FIXME check
-      if (line.includes('FIXME')) {
-        comments.push({
-          path: file,
-          line: lineNum,
-          body: '🔧 **FIXME**: This issue needs to be resolved before merge.'
-        });
-      }
-
-      // JSDoc checks
+      if (line.includ - use isNearChangedLine to catch functions after modified JSDoc
       const invalidJSDocPattern = /^\s*\/\/\s*[a-zA-Z]/;
-      if (invalidJSDocPattern.test(line)) {
+      if (invalidJSDocPattern.test(line) && isLineChanged(lineNum, changedRanges)) {
         if (index + 1 < lines.length) {
           const nextLine = lines[index + 1].trim();
           const isFunctionDecl =
@@ -110,6 +110,14 @@ function checkTypeScriptFile(file, changedRanges) {
               path: file,
               line: lineNum,
               body: '📚 **JSDoc Standard**: Use proper JSDoc format: `/** description */` for functions.'
+            });
+          }
+        }
+      }
+
+      // Missing JSDoc check - use isNearChangedLine to catch functions after removed JSDoc
+      const functionPattern = /^\s*(public\s+)?(async\s+)?([a-zA-Z_$]\w*)\s*\(/;
+      if (functionPattern.test(line) && !line.trim().startsWith('constructor') && isNearChangedLine(lineNum, changedRangescription */` for functions.'
             });
           }
         }
