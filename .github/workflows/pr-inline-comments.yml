@@ -93,27 +93,44 @@ jobs:
             }
 
             if (comments.length > 0) {
+              // Get the PR details to find the head commit SHA
+              const pr = await github.rest.pulls.get({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber
+              });
+
+              const commitSha = pr.data.head.sha;
+              console.log(`Using commit SHA: ${commitSha}`);
+
               // Format the comments for the Pull Request Review API
+              // IMPORTANT: Each comment MUST have commit_id and position
               const reviewComments = comments.map(c => ({
                 path: c.path,
                 line: parseInt(c.line), // Ensure this is a number
                 side: 'RIGHT',
-                body: c.body
+                body: c.body,
+                commit_id: commitSha
               }));
 
               console.log(`Attempting to post a review with ${reviewComments.length} comments...`);
 
-              // We post ONE review containing MANY comments. 
-              // This is better than a loop because it doesn't hit rate limits.
-              await github.rest.pulls.createReview({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-                event: 'REQUEST_CHANGES',
-                comments: reviewComments
-              });
+              // Batch comments in groups of 50 to avoid API limits
+              const batchSize = 50;
+              for (let i = 0; i < reviewComments.length; i += batchSize) {
+                const batch = reviewComments.slice(i, i + batchSize);
+                console.log(`Posting batch ${Math.floor(i / batchSize) + 1} with ${batch.length} comments...`);
 
-              console.log(`✓ Posted review with ${reviewComments.length} inline comments!`);
+                await github.rest.pulls.createReview({
+                  owner: repoOwner,
+                  repo: repoName,
+                  pull_number: prNumber,
+                  event: i === 0 ? 'REQUEST_CHANGES' : 'COMMENT',
+                  comments: batch
+                });
+              }
+
+              console.log(`✓ Posted review with ${reviewComments.length} inline comments in ${Math.ceil(reviewComments.length / batchSize)} batch(es)!`);
             } else {
               console.log('✓ No violations found!');
             }
