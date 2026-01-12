@@ -105,23 +105,27 @@ jobs:
               
               console.log(`Attempting to post ${reviewComments.length} comments...`);
               
-              // Post each violation as an issue comment with file and line info
-              for (const comment of reviewComments) {
+              // GitHub API has a limit of 30 comments per review, so batch them
+              const batchSize = 30;
+              for (let i = 0; i < reviewComments.length; i += batchSize) {
+                const batch = reviewComments.slice(i, i + batchSize);
                 try {
-                  const body = `**[${comment.path}:${comment.line}]** ${comment.body}`;
-                  await github.rest.issues.createComment({
+                  const review = await github.rest.pulls.createReview({
                     owner: repoOwner,
                     repo: repoName,
-                    issue_number: prNumber,
-                    body: body
+                    pull_number: prNumber,
+                    body: `Code Standards Review - Batch ${Math.floor(i / batchSize) + 1}`,
+                    event: 'REQUEST_CHANGES',
+                    comments: batch
                   });
-                  console.log(`✓ Posted comment on line ${comment.line}`);
+                  console.log(`✓ Posted review with ${batch.length} comments`);
+                  console.log('Review ID:', review.data.id);
                 } catch (error) {
-                  console.log(`❌ Failed to post comment: ${error.message}`);
+                  console.log(`❌ Failed to post review: ${error.message}`);
                 }
               }
               
-              console.log(`✓ Posted ${reviewComments.length} violation comments!`);
+              console.log(`✓ Posted all ${reviewComments.length} violation comments!`);
             } else {
               console.log('✓ No violations found!');
             }
