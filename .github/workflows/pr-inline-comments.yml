@@ -42,7 +42,7 @@ jobs:
           node .ci-standards/scripts/generate-pr-comments.js > violations.json 2>&1 || true
           cat violations.json
 
-      - name: Post violations as Checks annotations
+      - name: Post violations as PR Review Comments
         if: always()
         uses: actions/github-script@v7
         with:
@@ -59,50 +59,66 @@ jobs:
             console.log(`Found ${comments.length} violations`);
 
             if (comments.length > 0) {
-              // Paths are naturally correct - script runs in repo root
-              const annotations = comments.map(c => ({
-                path: c.path,
-                start_line: parseInt(c.line),
-                end_line: parseInt(c.line),
-                annotation_level: 'warning',
-                title: 'Code Standard Violation',
-                message: c.body
-              }));
-
-              // Use automatic context - no manual passing needed
+              // Get PR details
               const pr = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
               });
 
-              console.log(`Using commit SHA: ${pr.data.head.sha}`);
+              console.log(`Creating review for PR #${context.issue.number}, commit: ${pr.data.head.sha}`);
 
-              // Post annotations in batches of 50
-              const batchSize = 50;
-              for (let i = 0; i < annotations.length; i += batchSize) {
-                const batch = annotations.slice(i, i + batchSize);
-                const batchNum = Math.floor(i / batchSize) + 1;
-                const totalBatches = Math.ceil(annotations.length / batchSize);
+              // Format comments for PR review (max 30 per review)
+              const reviewComments = comments.slice(0, 30).map(c => ({
+                path: c.path,
+                line: parseInt(c.line),
+                body: c.body
+              }));
 
-                await github.rest.checks.create({
+              try {
+                // Create a review with REQUEST_CHANGES to require resolution
+                await github.rest.pulls.createReview({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  name: `Code Review Standards`,
-                  head_sha: pr.data.head.sha,
-                  status: 'completed',
-                  conclusion: 'failure',
-                  output: {
-                    title: `Standards Check Failures`,
-                    summary: `Found ${comments.length} violations. Please resolve these inline.`,
-                    annotations: batch
-                  }
+                  pull_number: context.issue.number,
+                  commit_id: pr.data.head.sha,
+                  body: `## 🔍 Code Standards Review\n\nFound **${comments.length}** violation(s) that need to be resolved.\n\n${comments.length > 30 ? '⚠️ Showing first 30 violations. Check logs for complete list.' : ''}`,
+                  event: 'REQUEST_CHANGES',
+                  comments: reviewComments
                 });
 
-                console.log(`✓ Posted batch ${batchNum}/${totalBatches} with ${batch.length} annotations`);
+                console.log(`✓ Posted ${reviewComments.length} review comments requiring resolution!`);
+                
+                // If more than 30 comments, post remaining as individual comments
+                if (comments.length > 30) {
+                  console.log(`Posting ${comments.length - 30} additional comments...`);
+                  for (let i = 30; i < Math.min(comments.length, 60); i++) {
+                    const c = comments[i];
+                    try {
+                      await github.rest.pulls.createReviewComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.issue.number,
+                        commit_id: pr.data.head.sha,
+                        path: c.path,
+                        line: parseInt(c.line),
+                        body: c.body
+                      });
+                    } catch (err) {
+                      console.log(`Could not post comment on ${c.path}:${c.line} - ${err.message}`);
+                    }
+                  }
+                }
+              } catch (error) {
+                console.log(`Error creating review: ${error.message}`);
+                // Fallback: post as issue comment
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `## 🔍 Code Standards Violations\n\nFound **${comments.length}** violations:\n\n${comments.slice(0, 10).map(c => `- \`${c.path}:${c.line}\` - ${c.body}`).join('\n')}\n\n${comments.length > 10 ? `...and ${comments.length - 10} more. Check workflow logs for details.` : ''}`
+                });
               }
-
-              console.log(`✓ All violations posted!`);
             } else {
               console.log('✓ No violations found!');
             }
