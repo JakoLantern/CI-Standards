@@ -68,10 +68,18 @@ jobs:
       - name: Post violations as PR review comments
         if: always()
         uses: actions/github-script@v7
+        env:
+          REPO_OWNER: ${{ inputs.repo_owner }}
+          REPO_NAME: ${{ inputs.repo_name }}
+          PR_NUMBER: ${{ inputs.pr_number }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
+            const repoOwner = process.env.REPO_OWNER;
+            const repoName = process.env.REPO_NAME;
+            const prNumber = parseInt(process.env.PR_NUMBER);
+            
             let comments = [];
             
             try {
@@ -85,6 +93,7 @@ jobs:
             }
             
             console.log(`Found ${comments.length} violations to post`);
+            console.log('Posting to:', repoOwner + '/' + repoName + ' PR #' + prNumber);
             
             if (comments.length > 0) {
               const reviewComments = comments.map(c => ({
@@ -94,18 +103,16 @@ jobs:
                 body: c.body
               }));
               
-              console.log(`Found ${reviewComments.length} comments to post`);
-              console.log('PR Number:', ${{ inputs.pr_number }});
-              console.log('Repo:', '${{ inputs.repo_owner }}/${{ inputs.repo_name }}');
+              console.log(`Attempting to post ${reviewComments.length} comments...`);
               
               // Post each violation as an issue comment with file and line info
               for (const comment of reviewComments) {
                 try {
                   const body = `**[${comment.path}:${comment.line}]** ${comment.body}`;
                   await github.rest.issues.createComment({
-                    owner: '${{ inputs.repo_owner }}',
-                    repo: '${{ inputs.repo_name }}',
-                    issue_number: ${{ inputs.pr_number }},
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
                     body: body
                   });
                   console.log(`✓ Posted comment on line ${comment.line}`);
