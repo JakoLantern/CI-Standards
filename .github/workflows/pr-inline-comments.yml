@@ -39,7 +39,8 @@ jobs:
         env:
           BASE_REF: origin/${{ github.base_ref }}
         run: |
-          node .ci-standards/scripts/generate-pr-comments.js > violations.json 2>&1 || true
+          node .ci-standards/scripts/generate-pr-comments.js > violations.json || true
+          echo "=== violations.json contents ==="
           cat violations.json
 
       - name: Post violations as PR Review Comments
