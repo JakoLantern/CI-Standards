@@ -96,7 +96,15 @@ function checkTypeScriptFile(file, changedRanges) {
       }
 
       // FIXME check
-      if (line.includ - use isNearChangedLine to catch functions after modified JSDoc
+      if (line.includes('FIXME')) {
+        comments.push({
+          path: file,
+          line: lineNum,
+          body: '🔧 **FIXME**: This issue needs to be resolved before merge.'
+        });
+      }
+
+      // JSDoc checks - use isNearChangedLine to catch functions after modified JSDoc
       const invalidJSDocPattern = /^\s*\/\/\s*[a-zA-Z]/;
       if (invalidJSDocPattern.test(line) && isLineChanged(lineNum, changedRanges)) {
         if (index + 1 < lines.length) {
@@ -117,15 +125,7 @@ function checkTypeScriptFile(file, changedRanges) {
 
       // Missing JSDoc check - use isNearChangedLine to catch functions after removed JSDoc
       const functionPattern = /^\s*(public\s+)?(async\s+)?([a-zA-Z_$]\w*)\s*\(/;
-      if (functionPattern.test(line) && !line.trim().startsWith('constructor') && isNearChangedLine(lineNum, changedRangescription */` for functions.'
-            });
-          }
-        }
-      }
-
-      // Missing JSDoc check
-      const functionPattern = /^\s*(public\s+)?(async\s+)?([a-zA-Z_$]\w*)\s*\(/;
-      if (functionPattern.test(line) && !line.trim().startsWith('constructor')) {
+      if (functionPattern.test(line) && !line.trim().startsWith('constructor') && isNearChangedLine(lineNum, changedRanges)) {
         let hasJSDoc = false;
         for (let i = index - 1; i >= Math.max(0, index - 5); i--) {
           if (lines[i].includes('*/')) {
