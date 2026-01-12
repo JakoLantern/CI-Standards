@@ -57,14 +57,11 @@ jobs:
           node ../scripts/generate-pr-comments.js > violations.json 2>&1 || true
           cat violations.json
           
-          # Check if violations found and fail if there are any
+          # Check if violations found and count them
           VIOLATION_COUNT=$(grep -o '"path"' violations.json | wc -l)
           echo "violation_count=$VIOLATION_COUNT" >> $GITHUB_OUTPUT
           
-          if [ $VIOLATION_COUNT -gt 0 ]; then
-            echo "Found $VIOLATION_COUNT violations"
-            exit 1
-          fi
+          # Don't exit here - let the check annotations step handle the failure
 
       - name: Post violations as Checks annotations
         if: always()
