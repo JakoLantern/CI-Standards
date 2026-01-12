@@ -14,17 +14,17 @@ jobs:
     name: Post Inline Review Comments
 
     steps:
+      - name: Checkout caller repo first
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Checkout reusable workflow repo
         uses: actions/checkout@v4
         with:
           repository: JakoLantern/CI-Standards
           fetch-depth: 0
           path: .ci-standards
-
-      - name: Checkout caller repo (default to repo root)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
