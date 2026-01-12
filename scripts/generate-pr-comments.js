@@ -7,54 +7,45 @@
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-const CONTEXT_LINES = 100;
+const CONTEXT_LINES = 3; // Small context for actual diff lines only
 const baseRef = process.env.BASE_REF || 'origin/main';
 
 function getChangedLineRanges(file) {
   try {
     const diffOutput = execSync(
-      `git diff -U${CONTEXT_LINES} ${baseRef}...HEAD -- "${file}"`
+      `git diff -U0 ${baseRef}...HEAD -- "${file}"`
     ).toString();
 
     const ranges = [];
     const lines = diffOutput.split('\n');
     let currentLine = 0;
-    let inHunk = false;
 
     for (const line of lines) {
       const hunkMatch = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
       if (hunkMatch) {
-        inHunk = true;
         currentLine = parseInt(hunkMatch[1]);
+        const count = parseInt(hunkMatch[2]) || 1;
+        // Track the entire hunk range
+        ranges.push({ start: currentLine, end: currentLine + count - 1 });
         continue;
       }
 
-      if (inHunk) {
-        if (line.startsWith('\\')) continue;
-        if (!line.startsWith('-')) {
-          currentLine++;
-        }
-
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-          if (!ranges.some(r => r.start <= currentLine && currentLine <= r.end)) {
-            ranges.push({ start: currentLine, end: currentLine });
-          }
-        }
+      if (!line.startsWith('-') && !line.startsWith('\\') && !line.startsWith('+++')) {
+        currentLine++;
       }
     }
 
     return ranges;
   } catch (error) {
-    console.log(`Could not get diff for ${file}`);
+    console.error(`Could not get diff for ${file}`);
     return [];
   }
 }
 
 function isLineChanged(lineNum, changedRanges) {
+  // Only return true if line is within the actual diff hunks
   return changedRanges.some(
-    range =>
-      lineNum >= range.start - CONTEXT_LINES &&
-      lineNum <= range.end + CONTEXT_LINES
+    range => lineNum >= range.start && lineNum <= range.end
   );
 }
 
