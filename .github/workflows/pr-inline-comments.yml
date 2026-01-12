@@ -14,9 +14,16 @@ jobs:
     name: Post Inline Review Comments
 
     steps:
-      - name: Checkout code
+      - name: Checkout CI-Standards repo
         uses: actions/checkout@v4
         with:
+          repository: JakoLantern/CI-Standards
+          fetch-depth: 0
+
+      - name: Checkout caller repo
+        uses: actions/checkout@v4
+        with:
+          path: caller-repo
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -32,7 +39,8 @@ jobs:
         env:
           BASE_REF: origin/${{ github.base_ref }}
         run: |
-          node scripts/generate-pr-comments.js > violations.json 2>&1 || echo "Script completed with violations"
+          cd caller-repo
+          node ../scripts/generate-pr-comments.js > violations.json 2>&1 || echo "Script completed with violations"
           cat violations.json
 
       - name: Post violations as PR review comments
@@ -43,7 +51,7 @@ jobs:
             let comments = [];
             
             try {
-              const output = fs.readFileSync('violations.json', 'utf8');
+              const output = fs.readFileSync('caller-repo/violations.json', 'utf8');
               const jsonMatch = output.match(/\[[\s\S]*\]/);
               if (jsonMatch) {
                 comments = JSON.parse(jsonMatch[0]);
