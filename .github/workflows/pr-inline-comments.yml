@@ -1,8 +1,7 @@
 name: PR Inline Code Comments
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_call:
 
 permissions:
   pull-requests: write

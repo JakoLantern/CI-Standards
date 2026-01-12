@@ -1,0 +1,7 @@
+# CI Standards CODEOWNERS
+# Only maintainers can modify CI/CD workflows and standards
+
+.github/workflows/ @JakoLantern
+scripts/ @JakoLantern
+.eslintrc.json @JakoLantern
+package.json @JakoLantern
