@@ -7,6 +7,14 @@ on:
         required: true
         type: number
         description: 'Pull Request number to post comments on'
+      repo_owner:
+        required: true
+        type: string
+        description: 'Repository owner'
+      repo_name:
+        required: true
+        type: string
+        description: 'Repository name'
 
 permissions:
   pull-requests: write
@@ -88,12 +96,12 @@ jobs:
               
               console.log(`Attempting to post ${reviewComments.length} comments...`);
               console.log('PR Number:', ${{ inputs.pr_number }});
-              console.log('Repo:', context.repo.owner + '/' + context.repo.repo);
+              console.log('Repo:', '${{ inputs.repo_owner }}' + '/' + '${{ inputs.repo_name }}');
               
               try {
                 const review = await github.rest.pulls.createReview({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
+                  owner: '${{ inputs.repo_owner }}',
+                  repo: '${{ inputs.repo_name }}',
                   pull_number: ${{ inputs.pr_number }},
                   body: `##  Code Standards Review\n\nFound ${reviewComments.length} violation(s) that need to be resolved. See inline comments below.`,
                   event: 'REQUEST_CHANGES',
@@ -108,8 +116,8 @@ jobs:
                 // Fallback: Post as issue comment
                 try {
                   await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
+                    owner: '${{ inputs.repo_owner }}',
+                    repo: '${{ inputs.repo_name }}',
                     issue_number: ${{ inputs.pr_number }},
                     body: `##  Code Standards Violations\n\nFound ${reviewComments.length} violations. Check the Actions logs for full details.`
                   });
