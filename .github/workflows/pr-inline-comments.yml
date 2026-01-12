@@ -20,6 +20,7 @@ permissions:
   pull-requests: write
   contents: read
   issues: read
+  checks: write
 
 jobs:
   inline-review:
@@ -65,7 +66,7 @@ jobs:
             exit 1
           fi
 
-      - name: Post violations as PR review comments
+      - name: Post violations as Checks annotations
         if: always()
         uses: actions/github-script@v7
         env:
@@ -93,44 +94,44 @@ jobs:
             }
 
             if (comments.length > 0) {
-              // Get the PR details to find the head commit SHA
-              const pr = await github.rest.pulls.get({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber
-              });
-
-              const commitSha = pr.data.head.sha;
-              console.log(`Using commit SHA: ${commitSha}`);
-
-              // Format the comments for the Pull Request Review API
-              // IMPORTANT: Each comment MUST have commit_id and position
-              const reviewComments = comments.map(c => ({
+              // Convert violations to Checks API annotations
+              const annotations = comments.map(c => ({
                 path: c.path,
-                line: parseInt(c.line), // Ensure this is a number
-                side: 'RIGHT',
-                body: c.body,
-                commit_id: commitSha
+                start_line: parseInt(c.line),
+                end_line: parseInt(c.line),
+                annotation_level: 'warning',
+                title: 'Code Standard Violation',
+                message: c.body
               }));
 
-              console.log(`Attempting to post a review with ${reviewComments.length} comments...`);
+              console.log(`Creating check run with ${annotations.length} annotations...`);
 
-              // Batch comments in groups of 50 to avoid API limits
+              // GitHub Checks API batches max 50 annotations per request
+              // Create one check run with batched annotations
               const batchSize = 50;
-              for (let i = 0; i < reviewComments.length; i += batchSize) {
-                const batch = reviewComments.slice(i, i + batchSize);
-                console.log(`Posting batch ${Math.floor(i / batchSize) + 1} with ${batch.length} comments...`);
+              for (let i = 0; i < annotations.length; i += batchSize) {
+                const batch = annotations.slice(i, i + batchSize);
+                const batchNum = Math.floor(i / batchSize) + 1;
+                const totalBatches = Math.ceil(annotations.length / batchSize);
 
-                await github.rest.pulls.createReview({
+                const checkResult = await github.rest.checks.create({
                   owner: repoOwner,
                   repo: repoName,
-                  pull_number: prNumber,
-                  event: i === 0 ? 'REQUEST_CHANGES' : 'COMMENT',
-                  comments: batch
+                  name: `Code Review (Batch ${batchNum}/${totalBatches})`,
+                  head_sha: context.payload.pull_request.head.sha,
+                  status: 'completed',
+                  conclusion: 'action_required',
+                  output: {
+                    title: `Code Standard Violations - Batch ${batchNum}`,
+                    summary: `Found ${batch.length} violations in this batch`,
+                    annotations: batch
+                  }
                 });
+
+                console.log(`✓ Posted check run batch ${batchNum} with ${batch.length} annotations`);
               }
 
-              console.log(`✓ Posted review with ${reviewComments.length} inline comments in ${Math.ceil(reviewComments.length / batchSize)} batch(es)!`);
+              console.log(`✓ Posted all violations as ${Math.ceil(annotations.length / batchSize)} check run(s)!`);
             } else {
               console.log('✓ No violations found!');
             }
