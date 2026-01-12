@@ -1,0 +1,89 @@
+name: PR Inline Code Comments
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: read
+
+jobs:
+  inline-review:
+    runs-on: ubuntu-latest
+    name: Post Inline Review Comments
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate PR comments from code violations
+        id: violations
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          node scripts/generate-pr-comments.js > violations.json 2>&1 || echo "Script completed with violations"
+          cat violations.json
+
+      - name: Post violations as PR review comments
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comments = [];
+            
+            try {
+              const output = fs.readFileSync('violations.json', 'utf8');
+              const jsonMatch = output.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                comments = JSON.parse(jsonMatch[0]);
+              }
+            } catch (error) {
+              console.log('Could not parse violations:', error.message);
+            }
+            
+            console.log(`Found ${comments.length} violations to post`);
+            
+            if (comments.length > 0) {
+              const reviewComments = comments.map(c => ({
+                path: c.path,
+                line: c.line,
+                side: 'RIGHT',
+                body: c.body
+              }));
+              
+              try {
+                await github.rest.pulls.createReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                  body: `##  Code Standards Review\n\nFound ${comments.length} violation(s) that need to be resolved. See inline comments below.`,
+                  event: 'REQUEST_CHANGES',
+                  comments: reviewComments.slice(0, 30)
+                });
+                console.log(' Review posted successfully!');
+              } catch (error) {
+                console.log('Could not post review:', error.message);
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `##  Code Standards Violations\n\nFound ${comments.length} violations. Check logs for details.`
+                });
+              }
+            } else {
+              console.log(' No violations found!');
+            }

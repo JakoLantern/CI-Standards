@@ -1,0 +1,17 @@
+{
+  "name": "ci-standards",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "eslint": "^9.39.2",
+    "eslint-plugin-jsdoc": "^62.0.0"
+  }
+}

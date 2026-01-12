@@ -1,0 +1,23 @@
+#!/bin/sh
+# Pre-commit hook to check code standards before committing
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+echo "🔍 Running code standards check on staged files..."
+
+# Check TypeScript standards
+node scripts/check-code-standards.js --staged
+if [ $? -ne 0 ]; then
+  echo "❌ Code standards check failed. Commit aborted."
+  echo "Run 'npm run check:standards:staged' to see details"
+  exit 1
+fi
+
+# Check Prettier formatting
+npx prettier --check $(git diff --cached --name-only --diff-filter=ACMRTUXB | grep -E '\.(ts|html|css|json)$' | tr '\n' ' ')
+if [ $? -ne 0 ]; then
+  echo "❌ Formatting check failed. Run 'npx prettier --write <file>' to fix"
+  exit 1
+fi
+
+echo "✓ All checks passed!"
+exit 0
