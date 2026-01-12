@@ -2,24 +2,10 @@ name: PR Inline Code Comments
 
 on:
   workflow_call:
-    inputs:
-      pr_number:
-        required: true
-        type: number
-        description: 'Pull Request number to post comments on'
-      repo_owner:
-        required: true
-        type: string
-        description: 'Repository owner'
-      repo_name:
-        required: true
-        type: string
-        description: 'Repository name'
 
 permissions:
   pull-requests: write
   contents: read
-  issues: read
   checks: write
 
 jobs:
@@ -28,16 +14,16 @@ jobs:
     name: Post Inline Review Comments
 
     steps:
-      - name: Checkout CI-Standards repo
+      - name: Checkout reusable workflow repo
         uses: actions/checkout@v4
         with:
           repository: JakoLantern/CI-Standards
           fetch-depth: 0
+          path: .ci-standards
 
-      - name: Checkout caller repo
+      - name: Checkout caller repo (default to repo root)
         uses: actions/checkout@v4
         with:
-          path: caller-repo
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -46,51 +32,36 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --prefix .ci-standards
 
       - name: Generate PR comments from code violations
         id: violations
         env:
           BASE_REF: origin/${{ github.base_ref }}
         run: |
-          cd caller-repo
-          node ../scripts/generate-pr-comments.js > violations.json 2>&1 || true
+          node .ci-standards/scripts/generate-pr-comments.js > violations.json 2>&1 || true
           cat violations.json
-          
-          # Check if violations found and count them
-          VIOLATION_COUNT=$(grep -o '"path"' violations.json | wc -l)
-          echo "violation_count=$VIOLATION_COUNT" >> $GITHUB_OUTPUT
-          
-          # Don't exit here - let the check annotations step handle the failure
 
       - name: Post violations as Checks annotations
         if: always()
         uses: actions/github-script@v7
-        env:
-          REPO_OWNER: ${{ inputs.repo_owner }}
-          REPO_NAME: ${{ inputs.repo_name }}
-          PR_NUMBER: ${{ inputs.pr_number }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const repoOwner = process.env.REPO_OWNER;
-            const repoName = process.env.REPO_NAME;
-            const prNumber = parseInt(process.env.PR_NUMBER);
 
-            // 1. Load the JSON
-            let rawData = fs.readFileSync('caller-repo/violations.json', 'utf8');
-            // Clean the log output if your node script printed extra text
+            // Load violations from current repo root
+            let rawData = fs.readFileSync('violations.json', 'utf8');
             const jsonStart = rawData.indexOf('[');
             const jsonEnd = rawData.lastIndexOf(']') + 1;
             const comments = JSON.parse(rawData.substring(jsonStart, jsonEnd));
 
-            console.log(`Found ${comments.length} violations to post`);
+            console.log(`Found ${comments.length} violations`);
 
             if (comments.length > 0) {
+              // Paths are naturally correct - script runs in repo root
               const annotations = comments.map(c => ({
-                // ensure path is relative to the REPO ROOT, not the worker root
-                path: c.path.replace('caller-repo/', ''), 
+                path: c.path,
                 start_line: parseInt(c.line),
                 end_line: parseInt(c.line),
                 annotation_level: 'warning',
@@ -98,16 +69,16 @@ jobs:
                 message: c.body
               }));
 
-              // 2. Get the correct SHA for the PR
-              const { data: pr } = await github.rest.pulls.get({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
+              // Use automatic context - no manual passing needed
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
               });
 
-              console.log(`Using commit SHA: ${pr.head.sha}`);
+              console.log(`Using commit SHA: ${pr.data.head.sha}`);
 
-              // 3. Post Annotations in batches of 50
+              // Post annotations in batches of 50
               const batchSize = 50;
               for (let i = 0; i < annotations.length; i += batchSize) {
                 const batch = annotations.slice(i, i + batchSize);
@@ -115,10 +86,10 @@ jobs:
                 const totalBatches = Math.ceil(annotations.length / batchSize);
 
                 await github.rest.checks.create({
-                  owner: repoOwner,
-                  repo: repoName,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
                   name: `Code Review Standards`,
-                  head_sha: pr.head.sha,
+                  head_sha: pr.data.head.sha,
                   status: 'completed',
                   conclusion: 'failure',
                   output: {
