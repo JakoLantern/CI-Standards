@@ -107,78 +107,6 @@ function collectFiles(dir) {
   return out;
 }
 
-// Determine source roots in Nx-style monorepos: src/, apps/*/src, libs/*/src
-if (files.length === 0) {
-  if (changed && isGitRepo()) {
-    files = getChangedFiles({ staged, ref: diffRef });
-    if (files.length === 0) {
-      console.log('ℹ️ No changed TypeScript files detected.');
-      process.exit(0);
-    }
-  } else if (scanAll) {
-    console.log('🔍 Scanning source directories for TypeScript files...');
-
-    const sourceDirs = [];
-
-    // Top-level src
-    const rootSrc = path.join(process.cwd(), 'src');
-    if (fs.existsSync(rootSrc)) sourceDirs.push(rootSrc);
-
-    // apps/*/src
-    const appsRoot = path.join(process.cwd(), 'apps');
-    if (fs.existsSync(appsRoot)) {
-      for (const entry of fs.readdirSync(appsRoot, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const appSrc = path.join(appsRoot, entry.name, 'src');
-        if (fs.existsSync(appSrc)) sourceDirs.push(appSrc);
-      }
-    }
-
-    // libs/*/src
-    const libsRoot = path.join(process.cwd(), 'libs');
-    if (fs.existsSync(libsRoot)) {
-      for (const entry of fs.readdirSync(libsRoot, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const libSrc = path.join(libsRoot, entry.name, 'src');
-        if (fs.existsSync(libSrc)) sourceDirs.push(libSrc);
-      }
-    }
-
-    // projects/*/src (Angular workspace structure)
-    const projectsRoot = path.join(process.cwd(), 'projects');
-    if (fs.existsSync(projectsRoot)) {
-      for (const entry of fs.readdirSync(projectsRoot, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        // Check projects/*/src
-        const projectSrc = path.join(projectsRoot, entry.name, 'src');
-        if (fs.existsSync(projectSrc)) sourceDirs.push(projectSrc);
-        // Also check nested like projects/ntv360/component-pantry/src
-        const nestedPath = path.join(projectsRoot, entry.name);
-        for (const nested of fs.readdirSync(nestedPath, { withFileTypes: true })) {
-          if (!nested.isDirectory()) continue;
-          const nestedSrc = path.join(nestedPath, nested.name, 'src');
-          if (fs.existsSync(nestedSrc)) sourceDirs.push(nestedSrc);
-        }
-      }
-    }
-
-    // Collect TypeScript files from discovered source directories
-    for (const dir of sourceDirs) {
-      files.push(...collectFiles(dir));
-    }
-
-    if (files.length === 0) {
-      console.log('ℹ️ No source directories found. Provide file paths as args.');
-      process.exit(0);
-    }
-    
-    console.log(`📁 Found ${files.length} TypeScript files to check.`);
-  } else {
-    console.log('ℹ️ Provide file paths, use --changed/--staged, or pass --all to scan sources.');
-    process.exit(0);
-  }
-}
-
 let hasError = false;
 
 /**
@@ -590,6 +518,78 @@ function checkFile(file) {
 
 // Only run CLI behavior if executed directly (not required as module)
 if (require.main === module) {
+  // Determine source roots in Nx-style monorepos: src/, apps/*/src, libs/*/src
+  if (files.length === 0) {
+    if (changed && isGitRepo()) {
+      files = getChangedFiles({ staged, ref: diffRef });
+      if (files.length === 0) {
+        console.log('ℹ️ No changed TypeScript files detected.');
+        process.exit(0);
+      }
+    } else if (scanAll) {
+      console.log('🔍 Scanning source directories for TypeScript files...');
+
+      const sourceDirs = [];
+
+      // Top-level src
+      const rootSrc = path.join(process.cwd(), 'src');
+      if (fs.existsSync(rootSrc)) sourceDirs.push(rootSrc);
+
+      // apps/*/src
+      const appsRoot = path.join(process.cwd(), 'apps');
+      if (fs.existsSync(appsRoot)) {
+        for (const entry of fs.readdirSync(appsRoot, { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue;
+          const appSrc = path.join(appsRoot, entry.name, 'src');
+          if (fs.existsSync(appSrc)) sourceDirs.push(appSrc);
+        }
+      }
+
+      // libs/*/src
+      const libsRoot = path.join(process.cwd(), 'libs');
+      if (fs.existsSync(libsRoot)) {
+        for (const entry of fs.readdirSync(libsRoot, { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue;
+          const libSrc = path.join(libsRoot, entry.name, 'src');
+          if (fs.existsSync(libSrc)) sourceDirs.push(libSrc);
+        }
+      }
+
+      // projects/*/src (Angular workspace structure)
+      const projectsRoot = path.join(process.cwd(), 'projects');
+      if (fs.existsSync(projectsRoot)) {
+        for (const entry of fs.readdirSync(projectsRoot, { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue;
+          // Check projects/*/src
+          const projectSrc = path.join(projectsRoot, entry.name, 'src');
+          if (fs.existsSync(projectSrc)) sourceDirs.push(projectSrc);
+          // Also check nested like projects/ntv360/component-pantry/src
+          const nestedPath = path.join(projectsRoot, entry.name);
+          for (const nested of fs.readdirSync(nestedPath, { withFileTypes: true })) {
+            if (!nested.isDirectory()) continue;
+            const nestedSrc = path.join(nestedPath, nested.name, 'src');
+            if (fs.existsSync(nestedSrc)) sourceDirs.push(nestedSrc);
+          }
+        }
+      }
+
+      // Collect TypeScript files from discovered source directories
+      for (const dir of sourceDirs) {
+        files.push(...collectFiles(dir));
+      }
+
+      if (files.length === 0) {
+        console.log('ℹ️ No source directories found. Provide file paths as args.');
+        process.exit(0);
+      }
+      
+      console.log(`📁 Found ${files.length} TypeScript files to check.`);
+    } else {
+      console.log('ℹ️ Provide file paths, use --changed/--staged, or pass --all to scan sources.');
+      process.exit(0);
+    }
+  }
+
   files.forEach(checkFile);
 
   if (hasError) {
