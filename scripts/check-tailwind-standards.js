@@ -176,6 +176,11 @@ function checkCSSFile(filePath) {
           if (info.strict) {
             let hardcodedType = null;
             
+            // Allow design token functions (theme(), var())
+            if (/^(theme|var)\s*\(/.test(value)) {
+              return; // Skip - using design tokens is acceptable
+            }
+            
             if (property === 'color' || property === 'background-color' || property === 'border-color') {
               // Check for hardcoded colors
               if (HARDCODED_PATTERNS.HEX_COLOR.test(value) || 
@@ -205,6 +210,11 @@ function checkCSSFile(filePath) {
               });
               return;
             }
+          }
+          
+          // Skip non-strict properties if using design tokens
+          if (/^(theme|var)\s*\(/.test(value)) {
+            return; // Allow theme() and var() for all properties
           }
           
           // Check if we're in a :host selector - suggest @apply format
