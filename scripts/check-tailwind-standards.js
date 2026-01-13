@@ -7,15 +7,6 @@
 const fs = require('fs');
 const path = require('path');
 
-// CLI args
-const args = process.argv.slice(2);
-const explicitFiles = args.filter((a) => a.endsWith('.css'));
-
-if (explicitFiles.length === 0) {
-  console.log('Usage: node scripts/check-tailwind-standards.js <file.css> [file2.css]...');
-  process.exit(0);
-}
-
 // CSS properties that have direct Tailwind equivalents
 const TAILWIND_PROPERTIES = {
   // Colors
@@ -143,8 +134,6 @@ const HARDCODED_PATTERNS = {
   HARDCODED_FONT: /^(Arial|Helvetica|Times New Roman|Georgia|Verdana|Courier|Comic Sans|Impact|Trebuchet MS|Palatino|Garamond|Bookman|Tahoma|Lucida|Sans-serif|Serif|Monospace)$/i,
 };
 
-let violations = [];
-
 /**
  * Checks a CSS file for Tailwind standard violations
  * Flags hardcoded colors, fonts, and properties that have Tailwind equivalents
@@ -245,45 +234,62 @@ function checkCSSFile(filePath) {
   return fileViolations;
 }
 
-// Process files
-explicitFiles.forEach((file) => {
-  if (!fs.existsSync(file)) {
-    console.error(`File not found: ${file}`);
-    return;
-  }
-  checkCSSFile(file);
-});
-
-// Report violations
-if (violations.length > 0) {
-  const errors = violations.filter(v => v.severity === 'error');
-  const warnings = violations.filter(v => v.severity === 'warning');
-  
-  errors.forEach((v) => {
-    console.log(`❌ ${v.message}`);
-    console.log(`   File: ${v.file}:${v.line}`);
-    console.log(`   Property: ${v.property}: ${v.value}`);
-    console.log(`   Suggestion: Use Tailwind '${v.tailwind}' or global variables instead`);
-    console.log('');
-  });
-  
-  warnings.forEach((v) => {
-    console.log(`⚠️  ${v.message}`);
-    console.log(`   File: ${v.file}:${v.line}`);
-    console.log(`   Property: ${v.property}: ${v.value}`);
-    console.log(`   Suggestion: Use '${v.tailwind}' instead`);
-    console.log('');
-  });
-  
-  console.log(`\n❌ Found ${errors.length} error(s) and ${warnings.length} warning(s).`);
-  process.exit(1);
-} else {
-  console.log('✅ No Tailwind compliance issues found!');
-  process.exit(0);
-}
-
 // Export configuration and functions for use in other scripts
 module.exports = {
-  checkCSSFile
+  checkCSSFile,
+  TAILWIND_PROPERTIES,
+  EXEMPT_PROPERTIES,
+  HARDCODED_PATTERNS
 };
+
+// Only run CLI behavior if executed directly (not required as module)
+if (require.main === module) {
+  // CLI args
+  const args = process.argv.slice(2);
+  const explicitFiles = args.filter((a) => a.endsWith('.css'));
+
+  if (explicitFiles.length === 0) {
+    console.log('Usage: node scripts/check-tailwind-standards.js <file.css> [file2.css]...');
+    process.exit(0);
+  }
+  
+  let violations = [];
+  
+  // Process files
+  explicitFiles.forEach((file) => {
+    if (!fs.existsSync(file)) {
+      console.error(`File not found: ${file}`);
+      return;
+    }
+    violations = violations.concat(checkCSSFile(file));
+  });
+
+  // Report violations
+  if (violations.length > 0) {
+    const errors = violations.filter(v => v.severity === 'error');
+    const warnings = violations.filter(v => v.severity === 'warning');
+    
+    errors.forEach((v) => {
+      console.log(`❌ ${v.message}`);
+      console.log(`   File: ${v.file}:${v.line}`);
+      console.log(`   Property: ${v.property}: ${v.value}`);
+      console.log(`   Suggestion: Use Tailwind '${v.tailwind}' or global variables instead`);
+      console.log('');
+    });
+    
+    warnings.forEach((v) => {
+      console.log(`⚠️  ${v.message}`);
+      console.log(`   File: ${v.file}:${v.line}`);
+      console.log(`   Property: ${v.property}: ${v.value}`);
+      console.log(`   Suggestion: Use '${v.tailwind}' instead`);
+      console.log('');
+    });
+    
+    console.log(`\n❌ Found ${errors.length} error(s) and ${warnings.length} warning(s).`);
+    process.exit(1);
+  } else {
+    console.log('✅ No Tailwind compliance issues found!');
+    process.exit(0);
+  }
+}
 
