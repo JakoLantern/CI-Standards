@@ -109,21 +109,17 @@ function collectFiles(dir) {
 
 let hasError = false;
 
-/**
- * Checks a TypeScript file for code standard violations
- * Validates JSDoc, access modifiers, return types, and Angular patterns
- * @param {string} file - Path to the TypeScript file to check
- */
-function checkFile(file) {
-  const content = fs.readFileSync(file, 'utf-8');
-  const lines = content.split('\n');
+// ============================================================================
+// Module-level Helper Functions (for export and use in checkFile)
+// ============================================================================
 
-  /**
-   * Detects whether a proper JSDoc block sits above a line
-   * @param {number} index - Line index to check above
-   * @returns {{exists: boolean, isSingleLine: boolean, startIdx: number, endIdx: number, content: string}} JSDoc info object
-   */
-  function getJsDocInfo(index) {
+/**
+ * Detects whether a proper JSDoc block sits above a line
+ * @param {string[]} lines - Array of file lines
+ * @param {number} index - Line index to check above
+ * @returns {{exists: boolean, isSingleLine: boolean, startIdx: number, endIdx: number, content: string}} JSDoc info object
+ */
+function getJsDocInfo(lines, index) {
     let j = index - 1;
     // Skip blank lines and decorators (e.g., @HostListener, @Input, etc.)
     while (j >= 0 && (lines[j].trim() === '' || /^\s*@\w+/.test(lines[j]))) j--;
@@ -168,16 +164,157 @@ function checkFile(file) {
     }
 
     return { exists: false, isSingleLine: false, startIdx: -1, endIdx: -1, content: '' };
-  }
+}
 
-  /**
-   * Legacy wrapper for backward compatibility
-   * @param {number} index - Line index to check above
-   * @returns {boolean} True if JSDoc exists above the line
-   */
-  function hasJsDocAbove(index) {
-    return getJsDocInfo(index).exists;
+/**
+ * Extracts function parameters from a method line
+ * @param {string} line - The method declaration line
+ * @returns {Array<{name: string, type: string}>} Array of parameter objects with name and type
+ */
+function extractParams(line) {
+  const match = line.match(/\(([^)]*)\)/);
+  if (!match) return [];
+  const paramsStr = match[1].trim();
+  if (!paramsStr) return [];
+  // Split by comma, but handle generics (e.g., Array<string, number>)
+  const params = [];
+  let depth = 0;
+  let current = '';
+  for (const char of paramsStr) {
+    if (char === '<' || char === '(' || char === '{') depth++;
+    else if (char === '>' || char === ')' || char === '}') depth--;
+    else if (char === ',' && depth === 0) {
+      if (current.trim()) params.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
   }
+  if (current.trim()) params.push(current.trim());
+  // Extract param names and types
+  return params.map(p => {
+    // Handle destructuring like { x, y }: Point
+    if (p.trim().startsWith('{')) {
+      const destructMatch = p.match(/\}\s*:\s*(\S+)/);
+      return { name: 'destructured', type: destructMatch ? destructMatch[1] : 'unknown' };
+    }
+    const parts = p.split(':');
+    let name = parts[0].trim().replace(/^\?/, '').replace(/\?$/, ''); // Remove optional markers
+    let type = parts[1] ? parts[1].split('=')[0].trim() : 'unknown';
+    return { name, type };
+  }).filter(p => p.name);
+}
+
+/**
+ * Extracts the access modifier from a code line
+ * @param {string} line - The code line to parse
+ * @returns {string|null} The access modifier (public/private/protected) or null if none
+ */
+function getAccessModifier(line) {
+  const match = line.match(/^\s*(public|private|protected)\s/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Validates that JSDoc access modifier tag matches the actual code modifier
+ * @param {string} jsDocContent - The JSDoc comment content
+ * @param {string|null} actualModifier - The actual access modifier from code
+ * @returns {{valid: boolean, message: string}} Validation result with error message if invalid
+ */
+function checkAccessModifierTag(jsDocContent, actualModifier) {
+  if (!actualModifier) return { valid: true, message: '' }; // No modifier on line, skip this check
+  
+  const hasPublicTag = /@public\b/.test(jsDocContent);
+  const hasPrivateTag = /@private\b/.test(jsDocContent);
+  const hasProtectedTag = /@protected\b/.test(jsDocContent);
+  
+  const tagCount = [hasPublicTag, hasPrivateTag, hasProtectedTag].filter(Boolean).length;
+  
+  if (tagCount === 0) {
+    return { valid: false, message: `Missing @${actualModifier} tag in JSDoc` };
+  }
+  if (tagCount > 1) {
+    return { valid: false, message: 'Multiple access modifier tags in JSDoc' };
+  }
+  
+  if (actualModifier === 'public' && !hasPublicTag) {
+    return { valid: false, message: `JSDoc should have @public (method is public)` };
+  }
+  if (actualModifier === 'private' && !hasPrivateTag) {
+    return { valid: false, message: `JSDoc should have @private (method is private)` };
+  }
+  if (actualModifier === 'protected' && !hasProtectedTag) {
+    return { valid: false, message: `JSDoc should have @protected (method is protected)` };
+  }
+  
+  return { valid: true, message: '' };
+}
+
+/**
+ * Checks if JSDoc contains a @returns tag
+ * @param {string} jsDocContent - The JSDoc comment content
+ * @returns {boolean} True if @returns tag is present
+ */
+function hasReturnsTag(jsDocContent) {
+  return /@returns?\s/.test(jsDocContent);
+}
+
+/**
+ * Validates that JSDoc @param tags match function parameters
+ * @param {string} jsDocContent - The JSDoc comment content
+ * @param {Array<{name: string, type: string}>} params - Array of function parameters
+ * @returns {{valid: boolean, errors: string[]}} Validation result with array of error messages
+ */
+function checkParamTags(jsDocContent, params) {
+  if (params.length === 0) return { valid: true, errors: [] };
+  
+  const errors = [];
+  
+  for (const param of params) {
+    // Skip destructured params - they're complex to validate
+    if (param.name === 'destructured') continue;
+    
+    // Check if @param exists for this param name
+    const paramNameRegex = new RegExp(`@param\\s+(\\{[^}]*\\})?\\s*\\[?${param.name}\\]?[\\s\\-]`, 'i');
+    const paramMatch = jsDocContent.match(paramNameRegex);
+    
+    if (!paramMatch) {
+      errors.push(`Missing @param for '${param.name}'`);
+      continue;
+    }
+    
+    // Check if @param has {Type} in curly braces
+    const hasTypeInBraces = paramMatch[1] && paramMatch[1].length > 2; // More than just {}
+    if (!hasTypeInBraces) {
+      errors.push(`@param ${param.name} missing {Type} in curly braces`);
+    }
+  }
+  
+  // Also check for extra @param tags that don't match any actual params
+  const jsDocParamNames = [...jsDocContent.matchAll(/@param\s*(?:\{[^}]*\})?\s*\[?(\w+)\]?/g)].map(m => m[1]);
+  const actualParamNames = params.filter(p => p.name !== 'destructured').map(p => p.name);
+  
+  for (const docParam of jsDocParamNames) {
+    if (!actualParamNames.includes(docParam)) {
+      errors.push(`Extra @param '${docParam}' in JSDoc doesn't match any function parameter`);
+    }
+  }
+  
+  return { valid: errors.length === 0, errors };
+}
+
+// ============================================================================
+// File Checking
+// ============================================================================
+
+/**
+ * Checks a TypeScript file for code standard violations
+ * Validates JSDoc, access modifiers, return types, and Angular patterns
+ * @param {string} file - Path to the TypeScript file to check
+ */
+function checkFile(file) {
+  const content = fs.readFileSync(file, 'utf-8');
+  const lines = content.split('\n');
 
   // Simple regex for top-level method/function definitions in a class
   const methodRegex =
@@ -325,38 +462,38 @@ function checkFile(file) {
     }
     
     return { valid: errors.length === 0, errors };
-  }
+}
 
-  /**
-   * Validates that a property has proper single-line JSDoc format
-   * @param {Object} jsDocInfo - JSDoc info object from getJsDocInfo
-   * @param {string} propertyType - Type of property being checked (for error messages)
-   * @returns {string[]} Array of error messages if violations found
-   */
-  function checkSingleLineJsDoc(jsDocInfo, propertyType) {
-    const errors = [];
-    
-    if (!jsDocInfo.isSingleLine) {
-      errors.push(`${propertyType} should have single-line JSDoc (/** ... */), not multi-line`);
-    }
-    
-    // Check that single-line JSDoc has actual content (not just /** */)
-    if (jsDocInfo.isSingleLine) {
-      const content = jsDocInfo.content.replace(/\/\*\*|\*\//g, '').trim();
-      if (!content) {
-        errors.push(`${propertyType} JSDoc is empty - add a description`);
-      }
-    }
-    
-    return errors;
+/**
+ * Validates that a property has proper single-line JSDoc format
+ * @param {Object} jsDocInfo - JSDoc info object from getJsDocInfo
+ * @param {string} propertyType - Type of property being checked (for error messages)
+ * @returns {string[]} Array of error messages if violations found
+ */
+function checkSingleLineJsDoc(jsDocInfo, propertyType) {
+  const errors = [];
+  
+  if (!jsDocInfo.isSingleLine) {
+    errors.push(`${propertyType} should have single-line JSDoc (/** ... */), not multi-line`);
   }
+  
+  // Check that single-line JSDoc has actual content (not just /** */)
+  if (jsDocInfo.isSingleLine) {
+    const content = jsDocInfo.content.replace(/\/\*\*|\*\//g, '').trim();
+    if (!content) {
+      errors.push(`${propertyType} JSDoc is empty - add a description`);
+    }
+  }
+  
+  return errors;
+}
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // Check methods/functions
     if (methodRegex.test(line)) {
-      const jsDocInfo = getJsDocInfo(i);
+      const jsDocInfo = getJsDocInfo(lines, i);
 
       // ✅ Check access modifier on the code line
       const actualModifier = getAccessModifier(line);
@@ -406,7 +543,7 @@ function checkFile(file) {
 
     // Check computed properties
     if (computedRegex.test(line)) {
-      const jsDocInfo = getJsDocInfo(i);
+      const jsDocInfo = getJsDocInfo(lines, i);
       const hasAccess = /(public|private|protected)/.test(line);
 
       if (!jsDocInfo.exists) {
@@ -428,7 +565,7 @@ function checkFile(file) {
 
     // Check signal properties
     if (signalRegex.test(line)) {
-      const jsDocInfo = getJsDocInfo(i);
+      const jsDocInfo = getJsDocInfo(lines, i);
       const hasAccess = /(public|private|protected)/.test(line);
 
       if (!jsDocInfo.exists) {
@@ -450,7 +587,7 @@ function checkFile(file) {
 
     // Check input properties
     if (inputRegex.test(line)) {
-      const jsDocInfo = getJsDocInfo(i);
+      const jsDocInfo = getJsDocInfo(lines, i);
       const hasAccess = /(public|private|protected)/.test(line);
 
       if (!jsDocInfo.exists) {
@@ -472,7 +609,7 @@ function checkFile(file) {
 
     // Check output properties
     if (outputRegex.test(line)) {
-      const jsDocInfo = getJsDocInfo(i);
+      const jsDocInfo = getJsDocInfo(lines, i);
       const hasAccess = /(public|private|protected)/.test(line);
 
       if (!jsDocInfo.exists) {
@@ -494,7 +631,7 @@ function checkFile(file) {
 
     // Check viewChild properties
     if (viewChildRegex.test(line)) {
-      const jsDocInfo = getJsDocInfo(i);
+      const jsDocInfo = getJsDocInfo(lines, i);
       const hasAccess = /(public|private|protected)/.test(line);
 
       if (!jsDocInfo.exists) {
