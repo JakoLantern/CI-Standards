@@ -176,8 +176,30 @@ function checkCSSFile(filePath) {
           if (info.strict) {
             let hardcodedType = null;
             
-            // Allow design token functions (theme(), var())
-            if (/^(theme|var)\s*\(/.test(value)) {
+            // Check for var() usage - require fallback for strict properties
+            const varMatch = value.match(/^var\s*\(\s*([^)]+)\s*\)/);
+            if (varMatch) {
+              const varContent = varMatch[1];
+              // Check if var() has a fallback (contains a comma)
+              if (!varContent.includes(',')) {
+                fileViolations.push({
+                  file: filePath,
+                  line: lineNum,
+                  property: property,
+                  value: value,
+                  tailwind: info.tailwind,
+                  category: info.category,
+                  severity: 'error',
+                  message: `STRICT: var() must include a fallback value. Example: var(--custom-color, theme('colors.accent.main'))`
+                });
+                return;
+              }
+              // Has fallback, allow it
+              return;
+            }
+            
+            // Allow theme() function
+            if (/^theme\s*\(/.test(value)) {
               return; // Skip - using design tokens is acceptable
             }
             
