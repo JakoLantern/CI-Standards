@@ -122,8 +122,11 @@ function checkTypeScriptFile(file, changedRanges) {
       }
 
       // Enhanced JSDoc checks using check-code-standards logic
+      // Skip Angular reactive properties (computed, signal, input, output, viewChild)
+      const isAngularReactive = /=\s*(computed|signal|input|output|viewChild)\s*[<(]/.test(line);
+      
       const methodRegex = /^\s*(public|private|protected)?\s*(static)?\s*(async)?\s*([a-zA-Z_$]\w*)\s*\(/;
-      if (methodRegex.test(line) && !line.includes('constructor') && isNearChangedLine(lineNum, changedRanges)) {
+      if (methodRegex.test(line) && !line.includes('constructor') && !isAngularReactive && isNearChangedLine(lineNum, changedRanges)) {
         const jsDocInfo = getJsDocInfo(lines, index);
         
         if (!jsDocInfo.exists) {
@@ -168,6 +171,7 @@ function checkTypeScriptFile(file, changedRanges) {
         }
         
         // Check for return type annotation
+        const actualModifier = getAccessModifier(line);
         if (actualModifier && !/:\s*[A-Za-z0-9_[\]|<>]+/.test(line)) {
           comments.push({
             path: file,
