@@ -1,3 +1,9 @@
+/**
+ * Tailwind Standards Checker
+ * Validates CSS files for Tailwind compliance and flags hardcoded values
+ * Checks for properties that should use Tailwind utilities or design tokens
+ */
+
 const fs = require('fs');
 const path = require('path');
 
@@ -139,7 +145,14 @@ const HARDCODED_PATTERNS = {
 
 let violations = [];
 
+/**
+ * Checks a CSS file for Tailwind standard violations
+ * Flags hardcoded colors, fonts, and properties that have Tailwind equivalents
+ * @param {string} filePath - Path to the CSS file to check
+ * @returns {Array<{file: string, line: number, property: string, value: string, tailwind: string, category: string, severity: string, message: string}>} Array of violations found
+ */
 function checkCSSFile(filePath) {
+  const fileViolations = [];
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
@@ -191,7 +204,7 @@ function checkCSSFile(filePath) {
             }
             
             if (hardcodedType) {
-              violations.push({
+              fileViolations.push({
                 file: filePath,
                 line: lineNum,
                 property: property,
@@ -212,7 +225,7 @@ function checkCSSFile(filePath) {
             : `Use Tailwind '${info.tailwind}'`;
           
           // Regular check for any direct CSS property
-          violations.push({
+          fileViolations.push({
             file: filePath,
             line: lineNum,
             property: property,
@@ -229,6 +242,7 @@ function checkCSSFile(filePath) {
   } catch (error) {
     console.error(`Error reading file ${filePath}:`, error.message);
   }
+  return fileViolations;
 }
 
 // Process files
@@ -267,4 +281,9 @@ if (violations.length > 0) {
   console.log('✅ No Tailwind compliance issues found!');
   process.exit(0);
 }
+
+// Export configuration and functions for use in other scripts
+module.exports = {
+  checkCSSFile
+};
 

@@ -1,3 +1,9 @@
+/**
+ * Code Standards Checker
+ * Validates TypeScript files for JSDoc, access modifiers, return types, and Angular patterns
+ * Can be run directly or imported as a module
+ */
+
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
@@ -13,6 +19,10 @@ const diffRef = diffArg ? diffArg.split('=')[1] : null;
 
 let files = explicitFiles.slice();
 
+/**
+ * Checks if the current directory is a git repository
+ * @returns {boolean} True if inside a git repository
+ */
 function isGitRepo() {
   try {
     cp.execSync('git rev-parse --is-inside-work-tree', { stdio: 'pipe' });
@@ -22,6 +32,13 @@ function isGitRepo() {
   }
 }
 
+/**
+ * Gets list of changed TypeScript files from git
+ * @param {Object} options - Options for determining which files changed
+ * @param {boolean} [options.staged] - Get staged files only
+ * @param {string} [options.ref] - Compare against a specific git reference
+ * @returns {string[]} Array of file paths that were changed
+ */
 function getChangedFiles({ staged, ref } = {}) {
   if (!isGitRepo()) return [];
   try {
@@ -68,8 +85,12 @@ function getChangedFiles({ staged, ref } = {}) {
   }
 }
 
-// Recursively collect .ts files, skipping common build/vendor directories
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage', 'tmp', '.storybook']);
+/**
+ * Recursively collects all TypeScript files from a directory
+ * Skips common build/vendor directories like node_modules, dist, coverage
+ * @param {string} dir - Directory path to scan
+ * @returns {string[]} Array of TypeScript file paths
+ */
 function collectFiles(dir) {
   if (!fs.existsSync(dir)) return [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -160,12 +181,20 @@ if (files.length === 0) {
 
 let hasError = false;
 
+/**
+ * Checks a TypeScript file for code standard violations
+ * Validates JSDoc, access modifiers, return types, and Angular patterns
+ * @param {string} file - Path to the TypeScript file to check
+ */
 function checkFile(file) {
   const content = fs.readFileSync(file, 'utf-8');
   const lines = content.split('\n');
 
-  // Detect whether a proper JSDoc block (/** ... */) sits above a line
-  // Returns: { exists: boolean, isSingleLine: boolean, startIdx: number, endIdx: number }
+  /**
+   * Detects whether a proper JSDoc block sits above a line
+   * @param {number} index - Line index to check above
+   * @returns {{exists: boolean, isSingleLine: boolean, startIdx: number, endIdx: number, content: string}} JSDoc info object
+   */
   function getJsDocInfo(index) {
     let j = index - 1;
     // Skip blank lines and decorators (e.g., @HostListener, @Input, etc.)
@@ -213,7 +242,11 @@ function checkFile(file) {
     return { exists: false, isSingleLine: false, startIdx: -1, endIdx: -1, content: '' };
   }
 
-  // Legacy wrapper for backward compatibility
+  /**
+   * Legacy wrapper for backward compatibility
+   * @param {number} index - Line index to check above
+   * @returns {boolean} True if JSDoc exists above the line
+   */
   function hasJsDocAbove(index) {
     return getJsDocInfo(index).exists;
   }
@@ -229,8 +262,11 @@ function checkFile(file) {
   const outputRegex = /^[ \t]*(public|private|protected)?[ \t]*[a-zA-Z0-9_]+\s*=\s*output\s*[<(]/;
   const viewChildRegex = /^[ \t]*(public|private|protected)?[ \t]*(readonly)?[ \t]*[a-zA-Z0-9_]+\s*=\s*viewChild(\.required)?\s*[<(]/;
 
-  // Helper to extract function parameters from a method line
-  // Returns array of { name: string, type: string }
+  /**
+   * Extracts function parameters from a method line
+   * @param {string} line - The method declaration line
+   * @returns {Array<{name: string, type: string}>} Array of parameter objects with name and type
+   */
   function extractParams(line) {
     const match = line.match(/\(([^)]*)\)/);
     if (!match) return [];
@@ -265,13 +301,22 @@ function checkFile(file) {
     }).filter(p => p.name);
   }
 
-  // Helper to extract the access modifier from the code line
+  /**
+   * Extracts the access modifier from a code line
+   * @param {string} line - The code line to parse
+   * @returns {string|null} The access modifier (public/private/protected) or null if none
+   */
   function getAccessModifier(line) {
     const match = line.match(/^\s*(public|private|protected)\s/);
     return match ? match[1] : null;
   }
 
-  // Helper to check if JSDoc has the correct @public/@private/@protected tag
+  /**
+   * Validates that JSDoc access modifier tag matches the actual code modifier
+   * @param {string} jsDocContent - The JSDoc comment content
+   * @param {string|null} actualModifier - The actual access modifier from code
+   * @returns {{valid: boolean, message: string}} Validation result with error message if invalid
+   */
   function checkAccessModifierTag(jsDocContent, actualModifier) {
     if (!actualModifier) return { valid: true, message: '' }; // No modifier on line, skip this check
     
@@ -301,12 +346,21 @@ function checkFile(file) {
     return { valid: true, message: '' };
   }
 
-  // Helper to check if JSDoc contains @returns
+  /**
+   * Checks if JSDoc contains a @returns tag
+   * @param {string} jsDocContent - The JSDoc comment content
+   * @returns {boolean} True if @returns tag is present
+   */
   function hasReturnsTag(jsDocContent) {
     return /@returns?\s/.test(jsDocContent);
   }
 
-  // Helper to check if JSDoc contains @param {Type} for each parameter with correct names
+  /**
+   * Validates that JSDoc @param tags match function parameters
+   * @param {string} jsDocContent - The JSDoc comment content
+   * @param {Array<{name: string, type: string}>} params - Array of function parameters
+   * @returns {{valid: boolean, errors: string[]}} Validation result with array of error messages
+   */
   function checkParamTags(jsDocContent, params) {
     if (params.length === 0) return { valid: true, errors: [] };
     
@@ -345,8 +399,13 @@ function checkFile(file) {
     return { valid: errors.length === 0, errors };
   }
 
-  // Check if a property should have single-line JSDoc
-  function checkSingleLineJsDoc(jsDocInfo, propertyType, file, lineNum) {
+  /**
+   * Validates that a property has proper single-line JSDoc format
+   * @param {Object} jsDocInfo - JSDoc info object from getJsDocInfo
+   * @param {string} propertyType - Type of property being checked (for error messages)
+   * @returns {string[]} Array of error messages if violations found
+   */
+  function checkSingleLineJsDoc(jsDocInfo, propertyType) {
     const errors = [];
     
     if (!jsDocInfo.isSingleLine) {
@@ -529,13 +588,27 @@ function checkFile(file) {
   }
 }
 
-files.forEach(checkFile);
+// Only run CLI behavior if executed directly (not required as module)
+if (require.main === module) {
+  files.forEach(checkFile);
 
-if (hasError) {
-  console.log('\n⚠️ Code standard violations found. Please fix and recommit.');
-  process.exit(1);
-} else {
-  console.log(
-    '✅ All code complies with JSDoc, access modifier, and return type rules!'
-  );
+  if (hasError) {
+    console.log('\n⚠️ Code standard violations found. Please fix and recommit.');
+    process.exit(1);
+  } else {
+    console.log(
+      '✅ All code complies with JSDoc, access modifier, and return type rules!'
+    );
+  }
 }
+
+// Export functions for use in other scripts
+module.exports = {
+  getJsDocInfo,
+  extractParams,
+  getAccessModifier,
+  checkAccessModifierTag,
+  hasReturnsTag,
+  checkParamTags,
+  checkFile
+};
