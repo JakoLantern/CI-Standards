@@ -225,7 +225,7 @@ let allComments = [];
 
 // Check TypeScript files
 for (const file of changedFilesOutput) {
-  if (!file.endsWith('.ts') || file.endsWith('.spec.ts')) continue;
+  if (!file.endsWith('.ts') || file.endsWith('.spec.ts') || file.endsWith('.stories.ts')) continue;
   const ranges = getChangedLineRanges(file);
   if (ranges.length === 0) continue;
   allComments = allComments.concat(checkTypeScriptFile(file, ranges));
