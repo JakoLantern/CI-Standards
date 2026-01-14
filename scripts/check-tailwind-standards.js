@@ -220,11 +220,11 @@ function checkCSSFile(filePath) {
                   tailwind: info.tailwind,
                   category: info.category,
                   severity: 'error',
-                  message: `STRICT: var() must include a fallback value. Example: var(--custom-color, theme('colors.accent.main'))`
+                  message: `STRICT: var() without fallback requires using @apply. Example: @apply ${info.tailwind} or use var(--custom-color, fallback-value)`
                 });
                 return;
               }
-              // Has fallback, allow it
+              // Has fallback, allow it and skip further checks
               return;
             }
             
@@ -264,8 +264,8 @@ function checkCSSFile(filePath) {
             }
           }
           
-          // Skip non-strict properties if using design tokens
-          if (/^(theme|var)\s*\(/.test(value)) {
+          // Skip non-strict properties if using design tokens (theme/var can be anywhere in the value)
+          if (/(theme|var)\s*\(/.test(value)) {
             return; // Allow theme() and var() for all properties
           }
           
