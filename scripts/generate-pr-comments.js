@@ -121,6 +121,20 @@ function checkTypeScriptFile(file, changedRanges) {
         });
       }
 
+      // General check for 'any' type in any variable/property/parameter declaration
+      if (/:\s*any\b/.test(line) && !line.trim().startsWith('//')) {
+        // Skip if it's inside a method (will be caught by method-specific checks)
+        const methodRegex = /^[ \t]*(public|private|protected)?[ \t]*[a-zA-Z0-9_]+\s*\([^)]*\)\s*:\s*[A-Za-z0-9_[\]|<>]+[ \t]*\{/;
+        if (!methodRegex.test(line)) {
+          comments.push({
+            path: file,
+            line: lineNum,
+            body: '❌ **Type Standard**: Type `any` is not allowed. Use a specific type instead.'
+          });
+          return; // Skip further processing for this line
+        }
+      }
+
       // Enhanced JSDoc checks using check-code-standards logic
       // Skip Angular reactive properties (computed, signal, input, output, viewChild)
       const isAngularReactive = /=\s*(computed|signal|input|output|viewChild)\s*[<(]/.test(line);
@@ -179,6 +193,27 @@ function checkTypeScriptFile(file, changedRanges) {
             line: lineNum,
             body: '⚠️ **Code Standard**: Method missing return type annotation.'
           });
+        }
+
+        // Check for 'any' types in return type
+        if (/:\s*any\b/.test(line)) {
+          comments.push({
+            path: file,
+            line: lineNum,
+            body: '❌ **Type Standard**: Return type cannot be `any`. Use a specific type instead.'
+          });
+        }
+
+        // Check for 'any' types in parameters
+        const params = extractParams(line);
+        for (const param of params) {
+          if (param.type === 'any') {
+            comments.push({
+              path: file,
+              line: lineNum,
+              body: `❌ **Type Standard**: Parameter '${param.name}' cannot have type \`any\`. Use a specific type instead.`
+            });
+          }
         }
       }
     });
