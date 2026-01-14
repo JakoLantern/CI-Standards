@@ -367,14 +367,9 @@ function checkFile(file, logErrors = true) {
   const content = fs.readFileSync(file, 'utf-8');
   const lines = content.split('\n');
 
-  // IMPROVED: More specific regex for actual class methods/functions
-  // Matches: public/private/protected methodName(params): ReturnType {
-  // But excludes: if, while, for, switch, catch, etc.
-  // Pattern: starts with optional modifier, then identifier, then params, then return type
-  const methodRegex = /^[ \t]*(public|private|protected)[ \t]+(?!if|while|for|switch|catch|function)[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*:\s*[A-Za-z0-9_$[\]|<>\.,'"\s:-]+\s*\{/;
-  
-  // Also match methods without explicit access modifier in class context (but be more conservative)
-  const implicitMethodRegex = /^[ \t]+(?!if|while|for|switch|catch|function|constructor|ngOnInit|ngOnDestroy|ngOnChanges|ngAfterViewInit|ngAfterContentInit|ngAfterViewChecked|ngAfterContentChecked)[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*:\s*(?:void|boolean|string|number|any|Promise|Observable|[A-Z][a-zA-Z0-9_$<>[\]|,\s.'"-]*)\s*\{/;
+  // Simple regex for top-level method/function definitions in a class
+  const methodRegex =
+    /^[ \t]*(public|private|protected)?[ \t]*[a-zA-Z0-9_]+\s*\([^)]*\)\s*:\s*[A-Za-z0-9_[\]|<>]+[ \t]*\{/;
 
   // Angular Signals - more specific
   const computedRegex = /^[ \t]*(public|private|protected)[ \t]+(readonly[ \t]+)?[a-zA-Z_$][a-zA-Z0-9_$]*\s*=\s*computed\s*[<(]/;
