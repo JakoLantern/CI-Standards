@@ -8,6 +8,18 @@ const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 
+// Directories to skip when collecting files
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  'coverage',
+  'build',
+  '.git',
+  '.angular',
+  'out-tsc',
+  '.cache'
+]);
+
 // CLI args
 const args = process.argv.slice(2);
 const explicitFiles = args.filter((a) => a.endsWith('.ts'));
@@ -121,8 +133,20 @@ let hasError = false;
  */
 function getJsDocInfo(lines, index) {
     let j = index - 1;
-    // Skip blank lines and decorators (e.g., @HostListener, @Input, etc.)
-    while (j >= 0 && (lines[j].trim() === '' || /^\s*@\w+/.test(lines[j]))) j--;
+    
+    // Skip only ACTUAL decorators (like @HostListener, @Input which appear OUTSIDE comment blocks)
+    // Do NOT skip JSDoc lines that contain @public, @param, @returns, etc.
+    // Decorators appear as @DecoratorName(...) on their own lines, not as part of /**...*/ blocks
+    while (j >= 0 && lines[j].trim() === '') j--; // Skip blank lines first
+    
+    // Now skip TypeScript/Angular decorators only (must NOT contain /* or *)
+    while (j >= 0 && /^\s*@[A-Z]\w+\s*[\({]/.test(lines[j])) {
+      j--;
+    }
+    
+    // Skip remaining blank lines
+    while (j >= 0 && lines[j].trim() === '') j--;
+    
     if (j < 0) return { exists: false, isSingleLine: false, startIdx: -1, endIdx: -1, content: '' };
 
     const line = lines[j];
@@ -251,12 +275,12 @@ function checkAccessModifierTag(jsDocContent, actualModifier) {
 }
 
 /**
- * Checks if JSDoc contains a @returns tag
+ * Checks if JSDoc contains a @returns or @return tag
  * @param {string} jsDocContent - The JSDoc comment content
- * @returns {boolean} True if @returns tag is present
+ * @returns {boolean} True if @returns or @return tag is present
  */
 function hasReturnsTag(jsDocContent) {
-  return /@returns?\s/.test(jsDocContent);
+  return /@returns?\s|\@returns?\s*$/m.test(jsDocContent);
 }
 
 /**
@@ -343,16 +367,21 @@ function checkFile(file, logErrors = true) {
   const content = fs.readFileSync(file, 'utf-8');
   const lines = content.split('\n');
 
-  // Simple regex for top-level method/function definitions in a class
-  const methodRegex =
-    /^[ \t]*(public|private|protected)?[ \t]*[a-zA-Z0-9_]+\s*\([^)]*\)\s*:\s*[A-Za-z0-9_[\]|<>]+[ \t]*\{/;
+  // IMPROVED: More specific regex for actual class methods/functions
+  // Matches: public/private/protected methodName(params): ReturnType {
+  // But excludes: if, while, for, switch, catch, etc.
+  // Pattern: starts with optional modifier, then identifier, then params, then return type
+  const methodRegex = /^[ \t]*(public|private|protected)[ \t]+(?!if|while|for|switch|catch|function)[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*:\s*[A-Za-z0-9_$[\]|<>\.,'"\s:-]+\s*\{/;
+  
+  // Also match methods without explicit access modifier in class context (but be more conservative)
+  const implicitMethodRegex = /^[ \t]+(?!if|while|for|switch|catch|function|constructor|ngOnInit|ngOnDestroy|ngOnChanges|ngAfterViewInit|ngAfterContentInit|ngAfterViewChecked|ngAfterContentChecked)[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*:\s*(?:void|boolean|string|number|any|Promise|Observable|[A-Z][a-zA-Z0-9_$<>[\]|,\s.'"-]*)\s*\{/;
 
-  // Regex patterns for Angular signals, computed, inputs, outputs
-  const computedRegex = /^[ \t]*(public|private|protected)?[ \t]*(readonly)?[ \t]*[a-zA-Z0-9_]+\s*=\s*computed\s*[<(]/;
-  const signalRegex = /^[ \t]*(public|private|protected)?[ \t]*(readonly)?[ \t]*[a-zA-Z0-9_]+\s*=\s*signal\s*[<(]/;
-  const inputRegex = /^[ \t]*(public|private|protected)?[ \t]*[a-zA-Z0-9_]+\s*=\s*input(\.required)?\s*[<(]/;
-  const outputRegex = /^[ \t]*(public|private|protected)?[ \t]*[a-zA-Z0-9_]+\s*=\s*output\s*[<(]/;
-  const viewChildRegex = /^[ \t]*(public|private|protected)?[ \t]*(readonly)?[ \t]*[a-zA-Z0-9_]+\s*=\s*viewChild(\.required)?\s*[<(]/;
+  // Angular Signals - more specific
+  const computedRegex = /^[ \t]*(public|private|protected)[ \t]+(readonly[ \t]+)?[a-zA-Z_$][a-zA-Z0-9_$]*\s*=\s*computed\s*[<(]/;
+  const signalRegex = /^[ \t]*(public|private|protected)[ \t]+(readonly[ \t]+)?[a-zA-Z_$][a-zA-Z0-9_$]*\s*=\s*signal\s*[<(]/;
+  const inputRegex = /^[ \t]*(public|private|protected)[ \t]+[a-zA-Z_$][a-zA-Z0-9_$]*\s*=\s*input(\.required)?\s*[<(]/;
+  const outputRegex = /^[ \t]*(public|private|protected)[ \t]+[a-zA-Z_$][a-zA-Z0-9_$]*\s*=\s*output\s*[<(]/;
+  const viewChildRegex = /^[ \t]*(public|private|protected)[ \t]+(readonly[ \t]+)?[a-zA-Z_$][a-zA-Z0-9_$]*\s*=\s*viewChild(\.required)?\s*[<(]/;
 
   /**
    * Helper to log and track violations

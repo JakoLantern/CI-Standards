@@ -147,13 +147,43 @@ function checkCSSFile(filePath) {
     const lines = content.split('\n');
     
     let currentSelector = '';
+    let inAtRule = false; // Track if we're inside @keyframes, @media, etc.
+    let atRuleDepth = 0; // Track nesting depth of at-rules
     
     lines.forEach((line, lineIndex) => {
       const lineNum = lineIndex + 1;
+      const trimmed = line.trim();
       
-      // Track current selector
+      // Check for at-rule start (@keyframes, @media, @supports, @-webkit-, etc.)
+      if (trimmed.startsWith('@')) {
+        inAtRule = true;
+        atRuleDepth++;
+        // Track current at-rule for reference
+        currentSelector = trimmed.split('{')[0].trim();
+        return; // Skip processing this line
+      }
+      
+      // Track closing braces to know when we exit at-rules
+      if (trimmed === '}') {
+        atRuleDepth = Math.max(0, atRuleDepth - 1);
+        if (atRuleDepth === 0) {
+          inAtRule = false;
+        }
+        return; // Skip processing closing braces
+      }
+      
+      // If we're inside an at-rule, skip Tailwind validation entirely
+      // (CSS inside @keyframes, @media, etc. cannot use Tailwind utilities)
+      if (inAtRule) {
+        return;
+      }
+      
+      // Track regular CSS selectors (non at-rules)
       if (line.includes('{')) {
-        currentSelector = line.split('{')[0].trim();
+        const selectorPart = line.split('{')[0].trim();
+        if (!selectorPart.startsWith('@')) {
+          currentSelector = selectorPart;
+        }
       }
       
       // Match CSS property: value patterns
