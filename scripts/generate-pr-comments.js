@@ -125,8 +125,9 @@ function checkTypeScriptFile(file, changedRanges) {
       // Skip Angular reactive properties (computed, signal, input, output, viewChild)
       const isAngularReactive = /=\s*(computed|signal|input|output|viewChild)\s*[<(]/.test(line);
       
-      const methodRegex = /^\s*(public|private|protected)?\s*(static)?\s*(async)?\s*([a-zA-Z_$]\w*)\s*\(/;
-      if (methodRegex.test(line) && !line.includes('constructor') && !isAngularReactive && isNearChangedLine(lineNum, changedRanges)) {
+      // Only match actual method declarations with return type annotation (filters out if, setTimeout, etc)
+      const methodRegex = /^[ \t]*(public|private|protected)?[ \t]*[a-zA-Z0-9_]+\s*\([^)]*\)\s*:\s*[A-Za-z0-9_[\]|<>]+[ \t]*\{/;
+      if (methodRegex.test(line) && !isAngularReactive && isNearChangedLine(lineNum, changedRanges)) {
         const jsDocInfo = getJsDocInfo(lines, index);
         
         if (!jsDocInfo.exists) {
